@@ -176,9 +176,22 @@ def process_advertisement(addr,addrType,rssi,adData,channel=None) :
         if None == devices.get(addr) :
             data = process_adData(adData)
             devices[addr] = data
+            str = addr
+            name = data.get('CompleteLocalName')
+            if None != name :
+                str += ' "%s"'%(name)
+            services = []
+            m16 = 'ListOf16bitServices'
+            for s in data :
+                if len(s) > len(m16) and m16 == s[-len(m16):] :
+                    for ss in data[s] :
+                        services.append('%04X'%(ss))
+            if len(services) :
+                str += 'Services: '+','.join(services)
+            print(str)
         if time.time() > timeout :
             dev.bt.scanner.stop()
-            list_devices()
+            #list_devices()
             setState('done')
     elif 'searching' == state :
         data = process_adData(adData)
@@ -236,7 +249,7 @@ def discover_ota(connection) :
     dev.bt.gatt.discover_characteristics(connection,handle)
     setState('discovering-ota-characteristics')
 
-def setTargetCharacteristic(handle,uuid) :
+def setTargetCharacteristic(handle,uuid,properties) :
     services = target.get('services')
     if None == services : return setState('confused')
     currentService = target.get('current-service-uuid')
@@ -245,8 +258,7 @@ def setTargetCharacteristic(handle,uuid) :
     if None == ota_service : return setState('confused')
     characteristics = ota_service.get('characteristics')
     if None == characteristics : return setState('confused')
-    characteristics[uuid] = {'handle':handle,'descriptors':{}}
-    #print('uuid: 0x%x'%(uuid))
+    characteristics[uuid] = {'handle':handle,'descriptors':{},'properties':properties}
     
 def initiate_ota(connection) :
     global target
@@ -262,7 +274,16 @@ def initiate_ota(connection) :
     if None == handle : return setState('confused')
     dev.bt.gatt.write_characteristic_value(connection,handle,b'\x00')
     setState('writing-ota-control')
-    
+
+def dump_gatt() :
+    services = target['services']
+    print(services)
+    for s in services :
+        print('Service UUID 0x%X'%(s))
+        characteristics = services[s]['characteristics']
+        for c in characteristics :
+            print('  Characteristic UUID 0x%X, properties: 0x%x'%(c,characteristics[c]['properties']))
+            
 def sl_bt_on_event(evt) :
     global app_rssi
     global timeout
@@ -289,12 +310,14 @@ def sl_bt_on_event(evt) :
     elif 'bt_evt_gatt_service' == evt :
         setTargetService(evt.service,int.from_bytes(evt.uuid,'little'))
     elif 'bt_evt_gatt_characteristic' == evt :
-        setTargetCharacteristic(evt.characteristic,int.from_bytes(evt.uuid,'little'))
+        print(evt)
+        setTargetCharacteristic(evt.characteristic,int.from_bytes(evt.uuid,'little'),evt.properties)
     elif 'bt_evt_gatt_procedure_completed' == evt:
         if 'discovering-services' == state :
             discover_ota(evt.connection)
         elif 'discovering-ota-characteristics' == state :
             initiate_ota(evt.connection)
+            dump_gatt()
         elif 'writing-ota-control' == state :
             setState('expecting-close')
         else :
