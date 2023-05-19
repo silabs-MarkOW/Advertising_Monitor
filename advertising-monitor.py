@@ -41,7 +41,7 @@ for opt,param in opts :
     elif '-t' == opt :
         connector = bgapi.SocketConnector((param,4901))
     elif '-u' == opt :
-        connector = bgapi.SerialConnector(param,bauderate=baudrate)
+        connector = bgapi.SerialConnector(param,baudrate=baudrate)
     elif '-x' == opt :
         xapi = param
     elif '-b' == opt :
